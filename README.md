@@ -46,5 +46,5 @@ This ensures blocked channels cannot be accessed accidentally while still allowi
 
 ## 📝 License
 
-This plugin was developed by [Marsel90] with assistance from ChatGPT.
+This plugin was developed by me with assistance from ChatGPT.
 It is provided as-is, free for personal and non-commercial use. Attribution appreciated.
