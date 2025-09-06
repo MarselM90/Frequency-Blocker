@@ -1,5 +1,5 @@
 (() => {
-  const blockedFreqs = [87.8, 96.2, 98.0, 99.2, 104.1, 104.5, 107.1];
+  const blockedFreqs = [87.8, 96.2, 98.0, 99.2, 100.0, 104.1, 104.5, 107.1, 95.5, 96.4, 94.6, 103.6, 93.4, 93.7, 100.1, 90.1];
   const EPSILON = 0.0001;
   const STEP = 0.1; 
   const PROTECT_RANGE = 0.09; 
@@ -7,6 +7,7 @@
 
   const state = {
     lastAllowedFreq: null,
+    lastDirection: "up",
   };
 
   window.isAdmin = false;
@@ -23,10 +24,11 @@
     if (box) return box;
 
     box = document.createElement("div");
+    box.id = "blocked-message-box";
     Object.assign(box.style, {
       position: "fixed",
       left: "50%",
-      top: "20%",
+      top: "10%",
       transform: "translateX(-50%)",
       padding: "12px 24px",
       backgroundColor: "rgba(255, 69, 58, 0.9)",
@@ -49,24 +51,26 @@
 
   const showMessage = (text) => {
     if (window.isAdmin) return;
-    const box = createMessageBox();
+    let box = createMessageBox();
     box.textContent = text;
-
-    box.style.transition = "opacity 0.5s ease-in-out";
-    box.style.opacity = 0;
     clearTimeout(messageTimeout);
+    box.style.opacity = 0;
 
-    requestAnimationFrame(() => {
-      box.style.opacity = 1;
-    });
+    requestAnimationFrame(() => { box.style.opacity = 1; });
 
     messageTimeout = setTimeout(() => {
       box.style.opacity = 0;
+      const removeHandler = () => {
+        if (box.style.opacity === "0") {
+          box.remove();
+          box.removeEventListener("transitionend", removeHandler);
+        }
+      };
+      box.addEventListener("transitionend", removeHandler);
     }, 1500);
   };
 
-  const blockedMessage = (freq) =>
-    `Frequency ${freq.toFixed(3)} MHz is blocked and cannot be accessed.`;
+  const blockedMessage = (freq) => `Frequency ${freq.toFixed(3)} MHz is blocked and cannot be accessed.`;
 
   const checkBlocked = (freq) => {
     if (window.isAdmin) return false;
@@ -100,6 +104,7 @@
 
   const handleTuneAttempt = (direction, event) => {
     const currentFreq = parseFloat(dataFrequencyElement.textContent);
+    state.lastDirection = direction;
     if (!isNaN(currentFreq)) {
       const newFreq = direction === "up" ? currentFreq + STEP : currentFreq - STEP;
       tuneToFrequency(newFreq, direction);
@@ -110,9 +115,99 @@
     }
   };
 
+  const createBlockedBanner = () => {
+    const banner = document.createElement("div");
+    banner.id = "blocked-banner";
+    banner.textContent = "Blocked frequencies permanent: " + blockedFreqs.join(", ");
+    Object.assign(banner.style, {
+      position: "fixed",
+      top: "15%",
+      left: "50%",
+      transform: "translateX(-50%)",
+      padding: "6px 12px",
+      fontFamily: "Arial, sans-serif",
+      fontSize: "14px",
+      fontWeight: "bold",
+      color: "white",
+      backgroundColor: "transparent", // total transparent
+      borderRadius: "6px",
+      zIndex: 1,
+      cursor: window.isAdmin ? "grab" : "default",
+      pointerEvents: window.isAdmin ? "auto" : "none", // guest nu poate interac?iona
+    });
+
+    // ascunde pe mobil
+    if (window.innerWidth <= 768) banner.style.display = "none";
+
+    document.body.appendChild(banner);
+
+    // încarca pozi?ia salvata
+    const savedPos = localStorage.getItem("blockedBannerPos");
+    if (savedPos) {
+      const pos = JSON.parse(savedPos);
+      banner.style.top = pos.top;
+      banner.style.left = pos.left;
+      banner.style.transform = pos.transform;
+    }
+
+    // face draggable doar pentru admin
+    if (window.isAdmin) makeDraggable(banner);
+  };
+
+  const makeDraggable = (element) => {
+    let offsetX = 0, offsetY = 0, startX = 0, startY = 0;
+
+    const onMouseDown = (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startY = e.clientY;
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    };
+
+    const onMouseMove = (e) => {
+      e.preventDefault();
+      offsetX = e.clientX - startX;
+      offsetY = e.clientY - startY;
+
+      const rect = element.getBoundingClientRect();
+      let newLeft = rect.left + offsetX;
+      let newTop = rect.top + offsetY;
+
+      const minLeft = 10;
+      const maxLeft = window.innerWidth - rect.width - 10;
+      const minTop = 10;
+      const maxTop = window.innerHeight - rect.height - 10;
+
+      newLeft = Math.max(minLeft, Math.min(maxLeft, newLeft));
+      newTop = Math.max(minTop, Math.min(maxTop, newTop));
+
+      element.style.left = newLeft + "px";
+      element.style.top = newTop + "px";
+      element.style.transform = "translate(0,0)";
+
+      startX = e.clientX;
+      startY = e.clientY;
+    };
+
+    const onMouseUp = (e) => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      localStorage.setItem(
+        "blockedBannerPos",
+        JSON.stringify({
+          top: element.style.top,
+          left: element.style.left,
+          transform: element.style.transform,
+        })
+      );
+    };
+
+    element.addEventListener("mousedown", onMouseDown);
+  };
+
   document.addEventListener("DOMContentLoaded", () => {
     checkAdminMode();
-
     if (typeof socket === "undefined" || socket === null) return;
 
     window.dataFrequencyElement = document.getElementById("data-frequency");
@@ -149,22 +244,18 @@
       if (!isNaN(currentFreq)) {
         if (checkBlocked(currentFreq)) {
           showMessage(blockedMessage(currentFreq));
-          const nextFreq = findNextAllowedFreq(
-            currentFreq,
-            state.lastAllowedFreq !== null && currentFreq > state.lastAllowedFreq
-              ? "up"
-              : "down"
-          );
+          let direction = state.lastDirection || "up";
+          const nextFreq = findNextAllowedFreq(currentFreq, direction);
+          state.lastAllowedFreq = nextFreq;
           sendTune(nextFreq);
         } else {
           state.lastAllowedFreq = currentFreq;
         }
       }
     });
-    freqObserver.observe(dataFrequencyElement, {
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
+
+    freqObserver.observe(dataFrequencyElement, { childList: true, characterData: true, subtree: true });
+
+    createBlockedBanner();
   });
 })();
