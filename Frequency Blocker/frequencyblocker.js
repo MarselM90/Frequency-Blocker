@@ -1,5 +1,5 @@
 (() => {
-  const blockedFreqs = [87.8, 96.2, 98.0, 99.2, 100.0, 104.1, 104.5, 107.1, 95.5, 96.4, 94.6, 103.6, 93.4, 93.7, 100.1, 90.1];
+  const blockedFreqs = [87.8, 96.2, 98.0, 99.2, 100.0];
   const EPSILON = 0.0001;
   const STEP = 0.1; 
   const PROTECT_RANGE = 0.09; 
@@ -141,7 +141,7 @@
 
     document.body.appendChild(banner);
 
-    // încarca pozi?ia salvata
+    // Ã®ncarca pozi?ia salvata
     const savedPos = localStorage.getItem("blockedBannerPos");
     if (savedPos) {
       const pos = JSON.parse(savedPos);
